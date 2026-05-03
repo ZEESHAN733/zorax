@@ -1,39 +1,83 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [listening, setListening] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const particles: any[] = [];
+    for (let i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.5 + 0.5,
+        dx: (Math.random() - 0.5) * 0.4,
+        dy: (Math.random() - 0.5) * 0.4,
+        opacity: Math.random() * 0.5 + 0.2,
+      });
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+        ctx.fill();
+        p.x += p.dx;
+        p.y += p.dy;
+        if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+      });
+      requestAnimationFrame(animate);
+    }
+    animate();
+  }, []);
 
   return (
     <main className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
       
-      {/* Glow Background */}
-      <div className="absolute w-96 h-96 bg-blue-600 rounded-full blur-3xl opacity-10 animate-pulse"></div>
+      {/* Particles */}
+      <canvas ref={canvasRef} className="absolute inset-0 z-0" />
 
-      {/* Logo */}
-      <h1 className="text-7xl font-bold text-white mb-2 tracking-widest z-10">
-        ⚡ ZORAX
-      </h1>
-      <p className="text-blue-400 text-lg mb-16 z-10 tracking-widest uppercase">
-        Your AI. Your Voice. Your World bcc.
-      </p>
+      {/* Glow */}
+      <div className={`absolute w-80 h-80 rounded-full blur-3xl transition-all duration-1000 ${listening ? "bg-blue-500 opacity-20 scale-150" : "bg-blue-800 opacity-10"}`}></div>
 
-      {/* Mic Button */}
-      <button
-        onClick={() => setListening(!listening)}
-        className={`z-10 w-28 h-28 rounded-full flex items-center justify-center text-5xl transition-all duration-300 ${
-          listening
-            ? "bg-red-500 shadow-lg shadow-red-500 scale-110 animate-pulse"
-            : "bg-blue-600 shadow-lg shadow-blue-500 hover:scale-110"
-        }`}
-      >
-        🎤
-      </button>
+      {/* Content */}
+      <div className="z-10 flex flex-col items-center">
 
-      <p className="text-gray-500 mt-8 z-10 text-sm">
-        {listening ? "Listening... Speak now!" : "Click mic to speak"}
-      </p>
+        {/* Logo */}
+        <p className="text-gray-500 text-xs tracking-[0.5em] uppercase mb-4">Introducing</p>
+        <h1 className="text-8xl font-thin text-white mb-2 tracking-[0.2em]">
+          ZORAX
+        </h1>
+        <p className="text-gray-400 text-sm tracking-[0.3em] uppercase mb-20">
+          Your AI. Your Voice. Your World.
+        </p>
 
-    </main>
-  );
-}
+        {/* Mic Button */}
+        <button
+          onClick={() => setListening(!listening)}
+          className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 ${
+            listening
+              ? "bg-white shadow-2xl shadow-white scale-110"
+              : "bg-white/10 border border-white/20 hover:bg-white/20 hover:scale-105 backdrop-blur-sm"
+          }`}
+        >
+          <span className="text-4xl">{listening ? "⏹" : "🎤"}</span>
+        </button>
+
+        <p className={`mt-8 text-sm tracking-widest transition-all duration-300 ${listening ? "text-white" : "text-gray-600"}`}>
+          {listening ? "LISTENING..." : "TAP TO SPEAK"}
+        </p>
+
+        {/* Animated rings when listening */}
+        {listening && (
+          <div className="absolute flex items-center justify-center">
+            <div className="w-32 h-32 rounded-full bor
