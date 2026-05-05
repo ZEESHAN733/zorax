@@ -3,8 +3,20 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [listening, setListening] = useState(false);
-  const [text, setText] = useState("");
+  const [time, setTime] = useState("");
+  const [date, setDate] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setTime(now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setDate(now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -12,14 +24,14 @@ export default function Home() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     const particles: any[] = [];
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 100; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        r: Math.random() * 1.5 + 0.5,
+        r: Math.random() * 1 + 0.3,
         dx: (Math.random() - 0.5) * 0.3,
         dy: (Math.random() - 0.5) * 0.3,
-        opacity: Math.random() * 0.4 + 0.1,
+        opacity: Math.random() * 0.3 + 0.1,
       });
     }
     function animate() {
@@ -27,7 +39,7 @@ export default function Home() {
       particles.forEach((p) => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(139,92,246,${p.opacity})`;
+        ctx.fillStyle = `rgba(0,255,255,${p.opacity})`;
         ctx.fill();
         p.x += p.dx;
         p.y += p.dy;
@@ -40,78 +52,86 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#030007] flex flex-col items-center justify-center relative overflow-hidden">
+    <main className="min-h-screen bg-[#020810] flex flex-col items-center justify-center relative overflow-hidden font-mono">
 
       {/* Particles */}
       <canvas ref={canvasRef} className="absolute inset-0 z-0" />
 
-      {/* Glow orbs */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-700 rounded-full blur-3xl opacity-10"></div>
-      <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-blue-700 rounded-full blur-3xl opacity-5"></div>
-
-      {/* Main Content */}
-      <div className="z-10 flex flex-col items-center text-center px-6">
-
-        {/* Badge */}
-        <div className="mb-8 px-4 py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-400 text-xs tracking-widest uppercase">
-          AI Voice Assistant
-        </div>
-
-        {/* Logo */}
-        <h1 className="text-7xl md:text-9xl font-extralight text-white mb-3 tracking-[0.15em]">
-          ZORAX
-        </h1>
-        <p className="text-gray-500 text-sm tracking-[0.4em] uppercase mb-16">
-          Your AI. Your Voice. Your World.
-        </p>
-
-        {/* Mic Button with rings */}
-        <div className="relative flex items-center justify-center mb-10">
-          {listening && (
-            <>
-              <div className="absolute w-36 h-36 rounded-full border border-purple-500/30 animate-ping"></div>
-              <div className="absolute w-52 h-52 rounded-full border border-purple-500/10 animate-ping" style={{animationDelay:"0.3s"}}></div>
-              <div className="absolute w-72 h-72 rounded-full border border-purple-500/5 animate-ping" style={{animationDelay:"0.6s"}}></div>
-            </>
-          )}
-          <button
-            onClick={() => setListening(!listening)}
-            className={`relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-700 ${
-              listening
-                ? "bg-gradient-to-br from-purple-500 to-blue-500 shadow-2xl shadow-purple-500/50 scale-110"
-                : "bg-white/5 border border-white/10 hover:border-purple-500/50 hover:bg-white/10 hover:scale-105"
-            }`}
-          >
-            <span className="text-5xl">{listening ? "⏹" : "🎤"}</span>
-          </button>
-        </div>
-
-        {/* Status */}
-        <p className={`text-sm tracking-[0.3em] uppercase transition-all duration-500 mb-12 ${listening ? "text-purple-400" : "text-gray-600"}`}>
-          {listening ? "● Listening..." : "Tap to speak"}
-        </p>
-
-        {/* Input Box */}
-        <div className="w-full max-w-md relative">
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Or type your message..."
-            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-purple-500/50 transition-all"
-          />
-          <button className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-purple-500 rounded-xl flex items-center justify-center hover:bg-purple-400 transition-all">
-            <span className="text-white text-sm">→</span>
-          </button>
-        </div>
-
+      {/* Grid lines */}
+      <div className="absolute inset-0 z-0 opacity-5"
+        style={{backgroundImage: "linear-gradient(cyan 1px, transparent 1px), linear-gradient(90deg, cyan 1px, transparent 1px)", backgroundSize: "50px 50px"}}>
       </div>
 
-      {/* Bottom */}
-      <p className="absolute bottom-8 text-gray-700 text-xs tracking-widest z-10">
-        ZORAX AI — POWERED BY GROQ
-      </p>
+      {/* Top HUD */}
+      <div className="absolute top-0 left-0 right-0 z-10 flex justify-between items-start p-6">
+        <div className="text-cyan-400 text-xs space-y-1">
+          <div className="text-cyan-300 text-lg font-bold tracking-widest">ZORAX</div>
+          <div className="text-cyan-600">SYSTEM ONLINE</div>
+          <div className="text-cyan-600">STATUS: READY</div>
+        </div>
+        <div className="text-right text-cyan-400 text-xs space-y-1">
+          <div className="text-cyan-300 text-2xl font-bold">{time}</div>
+          <div className="text-cyan-600 text-xs">{date}</div>
+          <div className="text-cyan-600">UAE — DUBAI</div>
+        </div>
+      </div>
 
-    </main>
-  );
-}
+      {/* Left Panel */}
+      <div className="absolute left-6 top-1/2 -translate-y-1/2 z-10 space-y-3">
+        {["VOICE", "MEMORY", "CONNECT", "SECURE"].map((item, i) => (
+          <div key={i} className="flex items-center gap-2 text-cyan-600 text-xs">
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+            {item}
+          </div>
+        ))}
+      </div>
+
+      {/* Right Panel */}
+      <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10 space-y-3 text-right">
+        {["AI CORE", "GROQ API", "NEURAL", "ACTIVE"].map((item, i) => (
+          <div key={i} className="flex items-center justify-end gap-2 text-cyan-600 text-xs">
+            {item}
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Center Content */}
+      <div className="z-10 flex flex-col items-center text-center">
+
+        {/* Outer Ring */}
+        <div className={`relative flex items-center justify-center mb-8 transition-all duration-700 ${listening ? "scale-110" : ""}`}>
+
+          {/* Rotating rings */}
+          <div className="absolute w-64 h-64 rounded-full border border-cyan-500/20 animate-spin" style={{animationDuration:"20s"}}></div>
+          <div className="absolute w-56 h-56 rounded-full border border-cyan-500/30 animate-spin" style={{animationDuration:"15s", animationDirection:"reverse"}}></div>
+          <div className="absolute w-48 h-48 rounded-full border border-cyan-400/20 animate-spin" style={{animationDuration:"10s"}}></div>
+
+          {/* Ping rings when listening */}
+          {listening && (
+            <>
+              <div className="absolute w-72 h-72 rounded-full border border-cyan-400/30 animate-ping"></div>
+              <div className="absolute w-96 h-96 rounded-full border border-cyan-400/10 animate-ping" style={{animationDelay:"0.5s"}}></div>
+            </>
+          )}
+
+          {/* Glow */}
+          <div className={`absolute w-32 h-32 rounded-full blur-2xl transition-all duration-700 ${listening ? "bg-cyan-400 opacity-20" : "bg-cyan-800 opacity-10"}`}></div>
+
+          {/* Mic Button */}
+          <button
+            onClick={() => setListening(!listening)}
+            className={`relative w-28 h-28 rounded-full flex flex-col items-center justify-center transition-all duration-500 border-2 ${
+              listening
+                ? "border-cyan-400 bg-cyan-400/10 shadow-2xl shadow-cyan-400/50"
+                : "border-cyan-600/50 bg-cyan-900/20 hover:border-cyan-400 hover:bg-cyan-400/10"
+            }`}
+          >
+            <span className="text-4xl mb-1">{listening ? "⏹" : "🎤"}</span>
+            <span className="text-cyan-400 text-xs tracking-widest">{listening ? "STOP" : "SPEAK"}</span>
+          </button>
+        </div>
+
+        {/* ZORAX Title */}
+        <h1 className="text-5xl font-thin text-cyan-300 tracking-[0.5em] mb-2">ZORAX</h1>
+        <p className="text-cyan-600 text-xs tracking-[0.3
