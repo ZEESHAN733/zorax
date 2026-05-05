@@ -134,4 +134,38 @@ export default function Home() {
 
         {/* ZORAX Title */}
         <h1 className="text-5xl font-thin text-cyan-300 tracking-[0.5em] mb-2">ZORAX</h1>
-        <p className="text-cyan-600 text-xs tracking-[0.3
+        <p className="text-cyan-600 text-xs tracking-[0.3em] uppercase mb-8">
+          {listening ? "▶ VOICE RECOGNITION ACTIVE..." : "YOUR AI. YOUR VOICE. YOUR WORLD."}
+        </p>
+
+        {/* Input */}
+        <div className="w-full max-w-lg relative">
+          <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
+          <input
+            type="text"
+            placeholder="ENTER COMMAND..."
+            className="w-full bg-cyan-950/20 border border-cyan-600/30 rounded-none px-6 py-4 text-cyan-300 placeholder-cyan-700 text-xs tracking-widest focus:outline-none focus:border-cyan-400/50 transition-all"
+          />
+          <div className="absolute -bottom-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
+          <button className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-cyan-300 text-sm tracking-widest transition-all">
+            SEND →
+          </button>
+        </div>
+
+      </div>
+
+      {/* Bottom HUD */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-between items-end p-6">
+        <div className="text-cyan-700 text-xs space-y-1">
+          <div>VERSION 1.0.0</div>
+          <div>BUILD 2026.05</div>
+        </div>
+        <div className="text-cyan-700 text-xs text-right space-y-1">
+          <div>POWERED BY GROQ</div>
+          <div>ZENNEXORA SYSTEMS</div>
+        </div>
+      </div>
+
+    </main>
+  );
+}
