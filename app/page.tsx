@@ -21,8 +21,8 @@ export default function Home() {
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
     }
   }, [input]);
 
@@ -50,21 +50,29 @@ export default function Home() {
     return () => document.removeEventListener('paste', handlePaste);
   }, []);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImagePreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const sendMessage = () => {
     if (!input.trim() && !imagePreview) return;
     
-    if (imagePreview) {
-      setMessages(prev => [...prev, { 
-        role: "user", 
-        content: input || "Image", 
-        image: imagePreview 
-      }]);
-      setImagePreview(null);
-    } else {
-      setMessages(prev => [...prev, { role: "user", content: input }]);
-    }
+    const newMsg: any = { 
+      role: "user", 
+      content: input || "Image" 
+    };
+    if (imagePreview) newMsg.image = imagePreview;
     
+    setMessages([...messages, newMsg]);
     setInput("");
+    setImagePreview(null);
     
     setTimeout(() => {
       setMessages(prev => [...prev, { 
@@ -86,17 +94,6 @@ export default function Home() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImagePreview(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
     <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex overflow-hidden">
 
@@ -113,15 +110,15 @@ export default function Home() {
             <div className="p-4 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg blur-md opacity-70"></div>
-                  <div className="relative w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl blur-md opacity-70"></div>
+                  <div className="relative w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
                 </div>
                 <div>
-                  <h2 className="font-bold text-lg">ZORAX</h2>
+                  <h2 className="font-bold text-xl">ZORAX</h2>
                   <p className="text-xs text-gray-400">AI Assistant</p>
                 </div>
               </div>
@@ -190,12 +187,12 @@ export default function Home() {
                 </svg>
               </button>
               <div className="md:hidden flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
-                <span className="font-bold">ZORAX</span>
+                <span className="font-bold text-lg">ZORAX</span>
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
@@ -215,7 +212,7 @@ export default function Home() {
 
         {/* Chat Area */}
         <main className="relative z-10 flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8 space-y-5 md:space-y-7">
+          <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
             
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 md:gap-4 ${msg.role === "user" ? "justify-end" : ""}`}>
@@ -229,16 +226,16 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-                <div className={`max-w-[85%] md:max-w-2xl rounded-2xl px-5 md:px-7 py-4 md:py-5 ${
+                <div className={`max-w-[85%] md:max-w-3xl rounded-2xl px-5 md:px-7 py-4 md:py-5 ${
                   msg.role === "user"
                     ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/20"
                     : "bg-white/10 backdrop-blur-xl border border-white/10 text-gray-100"
                 }`}>
-                  {msg.image && <img src={msg.image} alt="Uploaded" className="rounded-lg mb-3 max-w-full" />}
-                  <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  {msg.image && <img src={msg.image} alt="Attached" className="rounded-lg mb-3 max-w-full" />}
+                  <p className="text-base md:text-lg leading-relaxed">{msg.content}</p>
                 </div>
                 {msg.role === "user" && (
-                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center font-semibold text-sm flex-shrink-0 border border-white/20">
+                  <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center font-semibold flex-shrink-0 border border-white/20">
                     U
                   </div>
                 )}
@@ -256,7 +253,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl px-5 md:px-7 py-4 md:py-5">
-                  <p className="text-red-400 text-sm md:text-base">● Listening...</p>
+                  <p className="text-red-400 text-base md:text-lg">● Listening...</p>
                 </div>
               </div>
             )}
@@ -269,11 +266,11 @@ export default function Home() {
         <div className="relative z-10 border-t border-white/10 bg-black/30 backdrop-blur-xl flex-shrink-0">
           <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-5">
             
-            {/* Image Preview */}
+            {/* Image preview */}
             {imagePreview && (
               <div className="mb-3 relative inline-block">
-                <img src={imagePreview} alt="Preview" className="max-w-xs max-h-40 rounded-lg border border-white/20" />
-                <button
+                <img src={imagePreview} alt="Preview" className="max-w-xs rounded-lg border-2 border-blue-500" />
+                <button 
                   onClick={() => setImagePreview(null)}
                   className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center"
                 >
@@ -286,12 +283,12 @@ export default function Home() {
               <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl"></div>
               <div className="relative flex items-end gap-2 md:gap-3 p-2 md:p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl">
                 
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileSelect} />
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*" />
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   className="p-2 md:p-3 rounded-xl hover:bg-white/10 transition-colors group flex-shrink-0"
                 >
-                  <svg className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 md:w-6 md:h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
                 </button>
@@ -300,15 +297,10 @@ export default function Home() {
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  placeholder="Ask ZORAX... (Ctrl+V for images)"
+                  onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
+                  placeholder="Ask ZORAX anything... (Ctrl+V to paste images)"
                   rows={1}
-                  className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 md:py-3 px-2 text-sm md:text-base min-w-0 resize-none max-h-32 overflow-y-auto"
+                  className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 md:py-3 px-2 text-base md:text-lg resize-none max-h-40 overflow-y-auto min-w-0"
                 />
 
                 <button
@@ -319,7 +311,7 @@ export default function Home() {
                       : "hover:bg-white/10"
                   }`}
                 >
-                  <svg className={`w-5 h-5 ${listening ? "text-white" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-5 h-5 md:w-6 md:h-6 ${listening ? "text-white" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                   </svg>
                 </button>
@@ -327,14 +319,14 @@ export default function Home() {
                 <button
                   onClick={sendMessage}
                   disabled={!input.trim() && !imagePreview}
-                  className="px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg shadow-blue-500/30 disabled:shadow-none text-sm md:text-base flex-shrink-0"
+                  className="px-5 md:px-7 py-2 md:py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-800 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg shadow-blue-500/30 disabled:shadow-none text-base md:text-lg"
                 >
                   Send
                 </button>
               </div>
             </div>
 
-            <p className="text-xs text-gray-500 mt-3 text-center">
+            <p className="text-xs md:text-sm text-gray-500 mt-3 md:mt-4 text-center">
               ZORAX AI • Powered by Groq • Can make mistakes
             </p>
           </div>
