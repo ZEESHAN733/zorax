@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [messages, setMessages] = useState<any[]>([
-    { role: "assistant", content: "Hello! I'm ZORAX, powered by Groq AI. How can I help you today?" }
+    { role: "assistant", content: "Hello! I'm ZORAX, powered by Groq AI. You can speak or type your questions!" }
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
@@ -12,10 +12,52 @@ export default function Home() {
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recognizedText, setRecognizedText] = useState("");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const speechSynthesisRef = useRef<boolean>(false);
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = "en-US";
+
+      recognitionRef.current.onstart = () => {
+        setListening(true);
+        setRecognizedText("");
+      };
+
+      recognitionRef.current.onresult = (event: any) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            setInput(prev => prev + transcript + " ");
+          } else {
+            interim += transcript;
+          }
+        }
+        if (interim) setRecognizedText(interim);
+      };
+
+      recognitionRef.current.onend = () => {
+        setListening(false);
+        setRecognizedText("");
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setListening(false);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,10 +116,40 @@ export default function Home() {
     setAttachedFiles(attachedFiles.filter((f) => f.id !== id));
   };
 
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window)) {
+      console.error("Text-to-speech not supported");
+      return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    utterance.onstart = () => {
+      speechSynthesisRef.current = true;
+    };
+
+    utterance.onend = () => {
+      speechSynthesisRef.current = false;
+    };
+
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event.error);
+      speechSynthesisRef.current = false;
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
   const callGroqAPI = async (userMessage: string) => {
     try {
       setLoading(true);
-      
+
       const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
       if (!apiKey) {
         throw new Error("Groq API key not found. Please check your .env.local file");
@@ -109,7 +181,7 @@ export default function Home() {
 
       const data = await response.json();
       const aiResponse = data.choices?.[0]?.message?.content || "Sorry, I couldn't generate a response.";
-      
+
       return aiResponse;
     } catch (error: any) {
       console.error("Groq API Error:", error);
@@ -122,15 +194,15 @@ export default function Home() {
   const sendMessage = async () => {
     if (!input.trim() && !imagePreview && attachedFiles.length === 0) return;
 
-    const userMessage = input || "File sent";
-    
-    const newMsg: any = { 
-      role: "user", 
+    const userMessage = input.trim();
+
+    const newMsg: any = {
+      role: "user",
       content: userMessage
     };
     if (imagePreview) newMsg.image = imagePreview;
     if (attachedFiles.length > 0) newMsg.files = attachedFiles;
-    
+
     setMessages([...messages, newMsg]);
     setInput("");
     setImagePreview(null);
@@ -138,27 +210,33 @@ export default function Home() {
 
     // Get AI response from Groq
     const aiResponse = await callGroqAPI(userMessage);
-    
-    setMessages(prev => [...prev, { 
-      role: "assistant", 
+
+    setMessages(prev => [...prev, {
+      role: "assistant",
       content: aiResponse
     }]);
+
+    // Speak the AI response
+    speakText(aiResponse);
   };
 
   const handleVoice = () => {
+    if (!recognitionRef.current) {
+      alert("Voice recognition not supported in your browser. Use Chrome, Edge, or Safari.");
+      return;
+    }
+
     if (listening) {
+      recognitionRef.current.stop();
       setListening(false);
-      setMessages(prev => [...prev, 
-        { role: "user", content: "🎙️ Voice message received" }
-      ]);
     } else {
-      setListening(true);
+      recognitionRef.current.start();
     }
   };
 
   return (
     <div className="h-screen w-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex overflow-hidden">
-      
+
       {/* Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20 z-0">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-3xl animate-pulse"></div>
@@ -218,7 +296,7 @@ export default function Home() {
         <header className="border-b border-white/10 bg-black/30 backdrop-blur-xl flex-shrink-0">
           <div className="px-4 md:px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button 
+              <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="p-2 rounded-lg hover:bg-white/10"
               >
@@ -241,13 +319,13 @@ export default function Home() {
               <button className="p-2 rounded-lg hover:bg-white/10">⚙️</button>
 
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setShowMenu(!showMenu)}
                   className="p-2 rounded-lg hover:bg-white/10"
                 >
                   ⋮
                 </button>
-                
+
                 {showMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-slate-800/95 backdrop-blur border border-blue-500/30 rounded-lg shadow-xl z-50">
                     {[
@@ -322,22 +400,27 @@ export default function Home() {
               </div>
             )}
 
-            {/* STOP BUTTON WHEN LISTENING - WITH ANIMATION */}
+            {/* LISTENING STATE - SHOWS RECOGNIZED TEXT */}
             {listening && (
               <div className="flex gap-3 justify-start items-center">
                 <div className="w-8 h-8 rounded-lg bg-red-600 flex-shrink-0 flex items-center justify-center text-sm animate-pulse">🎙️</div>
-                <button 
-                  onClick={handleVoice}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-6 py-2.5 text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-blue-500/50"
-                >
-                  {/* Animated dots */}
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0s'}}></span>
-                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></span>
-                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></span>
-                  </span>
-                  <span>Listening</span>
-                </button>
+                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3 flex-1">
+                  {recognizedText ? (
+                    <p className="text-sm text-yellow-300">{recognizedText}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400">Listening...</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SPEAKING STATE */}
+            {speechSynthesisRef.current && (
+              <div className="flex gap-3 justify-start items-center">
+                <div className="w-8 h-8 rounded-lg bg-green-600 flex-shrink-0 flex items-center justify-center text-sm animate-pulse">🔊</div>
+                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3">
+                  <p className="text-sm text-green-400">Speaking...</p>
+                </div>
               </div>
             )}
 
@@ -348,13 +431,13 @@ export default function Home() {
         {/* INPUT */}
         <div className="border-t border-white/10 bg-black/30 backdrop-blur-xl flex-shrink-0">
           <div className="max-w-4xl mx-auto px-4 py-4">
-            
+
             {(imagePreview || attachedFiles.length > 0) && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {imagePreview && (
                   <div className="relative">
                     <img src={imagePreview} alt="preview" className="max-w-xs rounded border border-cyan-500 max-h-24" />
-                    <button 
+                    <button
                       onClick={() => setImagePreview(null)}
                       className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center"
                     >
@@ -372,16 +455,16 @@ export default function Home() {
             )}
 
             <div className="flex items-end gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileSelect} 
-                className="hidden" 
-                accept="*" 
-                multiple 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="*"
+                multiple
               />
 
-              <button 
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 rounded-lg hover:bg-white/10 flex-shrink-0 text-lg"
                 disabled={loading}
@@ -394,16 +477,19 @@ export default function Home() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
-                placeholder="Ask anything... (Ctrl+V to paste)"
+                placeholder="Type or click microphone to speak..."
                 rows={1}
-                disabled={loading}
+                disabled={loading || listening}
                 className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 text-sm resize-none overflow-hidden disabled:opacity-50"
               />
 
               <button
                 onClick={handleVoice}
-                className="p-2 rounded-lg flex-shrink-0 text-lg hover:bg-white/10 disabled:opacity-50"
+                className={`p-2 rounded-lg flex-shrink-0 text-lg transition ${
+                  listening ? "bg-red-500/30 text-red-300 hover:bg-red-500/40" : "hover:bg-white/10 text-gray-300 hover:text-white"
+                }`}
                 disabled={loading}
+                title={listening ? "Stop listening" : "Start speaking"}
               >
                 🎙️
               </button>
@@ -417,7 +503,7 @@ export default function Home() {
               </button>
             </div>
 
-            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX AI • Powered by Groq • Fast & Intelligent</p>
+            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX AI • Voice + Text • Powered by Groq</p>
           </div>
         </div>
 
