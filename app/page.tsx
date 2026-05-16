@@ -11,7 +11,6 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
-  const [voiceLines, setVoiceLines] = useState([0, 0, 0, 0, 0]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,14 +26,6 @@ export default function Home() {
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
     }
   }, [input]);
-
-  useEffect(() => {
-    if (!listening) return;
-    const interval = setInterval(() => {
-      setVoiceLines([0, 1, 2, 3, 4].map(() => Math.random() * 60 + 20));
-    }, 100);
-    return () => clearInterval(interval);
-  }, [listening]);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -78,6 +69,10 @@ export default function Home() {
     }
   };
 
+  const removeFile = (id: number) => {
+    setAttachedFiles(attachedFiles.filter((f) => f.id !== id));
+  };
+
   const sendMessage = () => {
     if (!input.trim() && !imagePreview && attachedFiles.length === 0) return;
     const newMsg: any = { 
@@ -103,7 +98,6 @@ export default function Home() {
   const handleVoice = () => {
     if (listening) {
       setListening(false);
-      setVoiceLines([0, 0, 0, 0, 0]);
       setMessages(prev => [...prev, 
         { role: "user", content: "🎙️ Voice input" },
         { role: "assistant", content: "Voice recorded!" }
@@ -263,15 +257,22 @@ export default function Home() {
               </div>
             ))}
 
+            {/* STOP BUTTON WHEN LISTENING - WITH ANIMATION */}
             {listening && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-lg bg-red-600 flex-shrink-0 flex items-center justify-center text-sm">🎙️</div>
-                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3 flex items-center gap-2">
-                  {voiceLines.map((h, i) => (
-                    <div key={i} className="w-1 bg-gradient-to-t from-cyan-400 to-pink-400 rounded-full" style={{height: `${h}px`}}/>
-                  ))}
-                  <span className="text-xs ml-2">Listening...</span>
-                </div>
+              <div className="flex gap-3 justify-start items-center">
+                <div className="w-8 h-8 rounded-lg bg-red-600 flex-shrink-0 flex items-center justify-center text-sm animate-pulse">🎙️</div>
+                <button 
+                  onClick={handleVoice}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-6 py-2.5 text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-blue-500/50"
+                >
+                  {/* Animated dots */}
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0s'}}></span>
+                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></span>
+                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></span>
+                  </span>
+                  <span>Listening</span>
+                </button>
               </div>
             )}
 
@@ -299,6 +300,7 @@ export default function Home() {
                 {attachedFiles.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded text-xs">
                     📎 {f.name}
+                    <button onClick={() => removeFile(f.id)} className="ml-2 text-gray-400 hover:text-white">✕</button>
                   </div>
                 ))}
               </div>
