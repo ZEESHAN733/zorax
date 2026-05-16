@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [messages, setMessages] = useState<any[]>([
-    { role: "assistant", content: "Hello! I'm ZORAX. How can I help?" }
+    { role: "assistant", content: "Hello! I'm ZORAX, powered by Groq AI. How can I help you today?" }
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
@@ -11,6 +11,7 @@ export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,11 +74,59 @@ export default function Home() {
     setAttachedFiles(attachedFiles.filter((f) => f.id !== id));
   };
 
-  const sendMessage = () => {
+  const callGroqAPI = async (userMessage: string) => {
+    try {
+      setLoading(true);
+      
+      const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+      if (!apiKey) {
+        throw new Error("Groq API key not found. Please check your .env.local file");
+      }
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "mixtral-8x7b-32768",
+          messages: [
+            {
+              role: "user",
+              content: userMessage,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 1024,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || "Failed to get response from Groq API");
+      }
+
+      const data = await response.json();
+      const aiResponse = data.choices?.[0]?.message?.content || "Sorry, I couldn't generate a response.";
+      
+      return aiResponse;
+    } catch (error: any) {
+      console.error("Groq API Error:", error);
+      return `Error: ${error.message || "Failed to connect to Groq API"}`;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMessage = async () => {
     if (!input.trim() && !imagePreview && attachedFiles.length === 0) return;
+
+    const userMessage = input || "File sent";
+    
     const newMsg: any = { 
       role: "user", 
-      content: input || "File sent"
+      content: userMessage
     };
     if (imagePreview) newMsg.image = imagePreview;
     if (attachedFiles.length > 0) newMsg.files = attachedFiles;
@@ -86,21 +135,21 @@ export default function Home() {
     setInput("");
     setImagePreview(null);
     setAttachedFiles([]);
+
+    // Get AI response from Groq
+    const aiResponse = await callGroqAPI(userMessage);
     
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        role: "assistant", 
-        content: "Got it! Ready for Groq API integration 🚀" 
-      }]);
-    }, 600);
+    setMessages(prev => [...prev, { 
+      role: "assistant", 
+      content: aiResponse
+    }]);
   };
 
   const handleVoice = () => {
     if (listening) {
       setListening(false);
       setMessages(prev => [...prev, 
-        { role: "user", content: "🎙️ Voice input" },
-        { role: "assistant", content: "Voice recorded!" }
+        { role: "user", content: "🎙️ Voice message received" }
       ]);
     } else {
       setListening(true);
@@ -247,7 +296,7 @@ export default function Home() {
                       ))}
                     </div>
                   )}
-                  <p className="text-sm">{msg.content}</p>
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 </div>
                 {msg.role === "user" && (
                   <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-pink-500 flex-shrink-0 flex items-center justify-center text-sm font-bold">
@@ -256,6 +305,22 @@ export default function Home() {
                 )}
               </div>
             ))}
+
+            {/* LOADING STATE */}
+            {loading && (
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex-shrink-0 flex items-center justify-center text-sm font-bold animate-pulse">
+                  Z
+                </div>
+                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3">
+                  <div className="flex gap-2 items-center">
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce"></span>
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: "0.2s"}}></span>
+                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: "0.4s"}}></span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* STOP BUTTON WHEN LISTENING - WITH ANIMATION */}
             {listening && (
@@ -319,6 +384,7 @@ export default function Home() {
               <button 
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 rounded-lg hover:bg-white/10 flex-shrink-0 text-lg"
+                disabled={loading}
               >
                 📎
               </button>
@@ -330,26 +396,28 @@ export default function Home() {
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
                 placeholder="Ask anything... (Ctrl+V to paste)"
                 rows={1}
-                className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 text-sm resize-none overflow-hidden"
+                disabled={loading}
+                className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 text-sm resize-none overflow-hidden disabled:opacity-50"
               />
 
               <button
                 onClick={handleVoice}
-                className="p-2 rounded-lg flex-shrink-0 text-lg hover:bg-white/10"
+                className="p-2 rounded-lg flex-shrink-0 text-lg hover:bg-white/10 disabled:opacity-50"
+                disabled={loading}
               >
                 🎙️
               </button>
 
               <button
                 onClick={sendMessage}
-                disabled={!input.trim() && !imagePreview && attachedFiles.length === 0}
+                disabled={(!input.trim() && !imagePreview && attachedFiles.length === 0) || loading}
                 className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm"
               >
-                Send
+                {loading ? "..." : "Send"}
               </button>
             </div>
 
-            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX AI • Powered by Groq</p>
+            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX AI • Powered by Groq • Fast & Intelligent</p>
           </div>
         </div>
 
