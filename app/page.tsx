@@ -3,22 +3,27 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [messages, setMessages] = useState<any[]>([
-    { role: "assistant", content: "Hello! I'm ZORAX, powered by Groq AI. You can speak or type your questions!" }
+    { role: "assistant", content: "Hello! I'm ZORAX, your AI assistant. You can speak, type, or upload files. I'll respond in real-time!" }
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recognizedText, setRecognizedText] = useState("");
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [liveMode, setLiveMode] = useState(false);
+  const [isLiveListening, setIsLiveListening] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
-  const speechSynthesisRef = useRef<boolean>(false);
+  const speechSynthesisRef = useRef<any>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const liveListeningRef = useRef<boolean>(false);
 
   // Initialize Web Speech API
   useEffect(() => {
@@ -50,6 +55,13 @@ export default function Home() {
       recognitionRef.current.onend = () => {
         setListening(false);
         setRecognizedText("");
+        
+        // Auto-continue listening in live mode
+        if (liveListeningRef.current && liveMode) {
+          setTimeout(() => {
+            recognitionRef.current?.start();
+          }, 500);
+        }
       };
 
       recognitionRef.current.onerror = (event: any) => {
@@ -57,72 +69,27 @@ export default function Home() {
         setListening(false);
       };
     }
-  }, []);
+  }, [liveMode]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading, listening]);
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px';
     }
   }, [input]);
 
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const blob = items[i].getAsFile();
-          if (blob) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              setImagePreview(event.target?.result as string);
-            };
-            reader.readAsDataURL(blob);
-          }
-        }
-      }
-    };
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, []);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const newFiles = Array.from(files).map((file) => ({
-        name: file.name,
-        type: file.type,
-        id: Date.now() + Math.random(),
-      }));
-      Array.from(files).forEach((file) => {
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            setImagePreview(event.target?.result as string);
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-      setAttachedFiles([...attachedFiles, ...newFiles]);
-    }
-  };
-
-  const removeFile = (id: number) => {
-    setAttachedFiles(attachedFiles.filter((f) => f.id !== id));
+  const stopSpeech = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
   };
 
   const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) {
-      console.error("Text-to-speech not supported");
-      return;
-    }
+    if (!autoSpeak || !('speechSynthesis' in window)) return;
 
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -131,29 +98,81 @@ export default function Home() {
     utterance.volume = 1.0;
 
     utterance.onstart = () => {
-      speechSynthesisRef.current = true;
+      setIsSpeaking(true);
     };
 
     utterance.onend = () => {
-      speechSynthesisRef.current = false;
+      setIsSpeaking(false);
+      
+      // Auto-listen if in live mode
+      if (liveMode && !liveListeningRef.current) {
+        liveListeningRef.current = true;
+        setIsLiveListening(true);
+        setTimeout(() => {
+          recognitionRef.current?.start();
+        }, 800);
+      }
     };
 
     utterance.onerror = (event) => {
       console.error("Speech synthesis error:", event.error);
-      speechSynthesisRef.current = false;
+      setIsSpeaking(false);
     };
 
+    speechSynthesisRef.current = utterance;
     window.speechSynthesis.speak(utterance);
   };
 
-  const callGroqAPI = async (userMessage: string) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const newFiles: any[] = [];
+      let loadedCount = 0;
+      
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result;
+          newFiles.push({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            id: Date.now() + Math.random(),
+            content: base64,
+          });
+          loadedCount++;
+          if (loadedCount === files.length) {
+            setAttachedFiles(prev => [...prev, ...newFiles]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeFile = (id: number) => {
+    setAttachedFiles(attachedFiles.filter((f) => f.id !== id));
+  };
+
+  const callGroqAPI = async (userMessage: string, files: any[]) => {
     try {
       setLoading(true);
-
       const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+      
       if (!apiKey) {
         throw new Error("Groq API key not found. Please check your .env.local file");
       }
+
+      let messageContent = userMessage;
+      
+      // Include file information if files are attached
+      if (files.length > 0) {
+        messageContent += "\n\n[Attached files: ";
+        messageContent += files.map(f => `${f.name} (${f.type})`).join(", ");
+        messageContent += "]";
+      }
+
+      streamAbortRef.current = new AbortController();
 
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -166,12 +185,13 @@ export default function Home() {
           messages: [
             {
               role: "user",
-              content: userMessage,
+              content: messageContent,
             },
           ],
           temperature: 0.7,
-          max_tokens: 1024,
+          max_tokens: 2048,
         }),
+        signal: streamAbortRef.current.signal,
       });
 
       if (!response.ok) {
@@ -181,9 +201,12 @@ export default function Home() {
 
       const data = await response.json();
       const aiResponse = data.choices?.[0]?.message?.content || "Sorry, I couldn't generate a response.";
-
+      
       return aiResponse;
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return "Response stopped by user.";
+      }
       console.error("Groq API Error:", error);
       return `Error: ${error.message || "Failed to connect to Groq API"}`;
     } finally {
@@ -192,32 +215,42 @@ export default function Home() {
   };
 
   const sendMessage = async () => {
-    if (!input.trim() && !imagePreview && attachedFiles.length === 0) return;
+    if (!input.trim() && attachedFiles.length === 0) return;
 
     const userMessage = input.trim();
+    const filesToSend = [...attachedFiles];
 
     const newMsg: any = {
       role: "user",
-      content: userMessage
+      content: userMessage,
+      files: filesToSend.length > 0 ? filesToSend.map(f => ({ name: f.name, type: f.type })) : null
     };
-    if (imagePreview) newMsg.image = imagePreview;
-    if (attachedFiles.length > 0) newMsg.files = attachedFiles;
 
-    setMessages([...messages, newMsg]);
+    setMessages(prev => [...prev, newMsg]);
     setInput("");
-    setImagePreview(null);
     setAttachedFiles([]);
 
-    // Get AI response from Groq
-    const aiResponse = await callGroqAPI(userMessage);
+    // Get AI response
+    const aiResponse = await callGroqAPI(userMessage, filesToSend);
 
-    setMessages(prev => [...prev, {
+    const aiMsg = {
       role: "assistant",
       content: aiResponse
-    }]);
+    };
 
-    // Speak the AI response
-    speakText(aiResponse);
+    setMessages(prev => [...prev, aiMsg]);
+    
+    // Speak if auto-speak enabled
+    if (autoSpeak) {
+      speakText(aiResponse);
+    } else if (liveMode) {
+      // If live mode but no auto-speak, still auto-listen
+      liveListeningRef.current = true;
+      setIsLiveListening(true);
+      setTimeout(() => {
+        recognitionRef.current?.start();
+      }, 500);
+    }
   };
 
   const handleVoice = () => {
@@ -226,124 +259,284 @@ export default function Home() {
       return;
     }
 
-    if (listening) {
+    if (listening || isLiveListening) {
       recognitionRef.current.stop();
       setListening(false);
+      setIsLiveListening(false);
+      liveListeningRef.current = false;
     } else {
       recognitionRef.current.start();
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([
+      { role: "assistant", content: "Hello! I'm ZORAX, your AI assistant. You can speak, type, or upload files. I'll respond in real-time!" }
+    ]);
+    setInput("");
+    setAttachedFiles([]);
+    liveListeningRef.current = false;
+    setIsLiveListening(false);
+  };
+
+  const handleClearHistory = () => {
+    if (confirm("Clear all chat history?")) {
+      handleNewChat();
     }
   };
 
   return (
     <div className="h-screen w-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex overflow-hidden">
 
-      {/* Background */}
+      {/* Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20 z-0">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl animate-pulse" style={{animationDelay:"2s"}}></div>
       </div>
 
-      {/* SIDEBAR */}
-      <aside className={`${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 border-r border-white/10 bg-black/50 backdrop-blur-xl flex flex-col hidden md:flex relative z-30`}>
-        {sidebarOpen && (
-          <>
-            <div className="p-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center font-bold text-white text-lg">
-                  Z
-                </div>
-                <div>
-                  <h1 className="font-bold text-lg">ZORAX</h1>
-                  <p className="text-xs text-gray-400">AI Assistant</p>
-                </div>
-              </div>
-            </div>
+      {/* MOBILE SIDEBAR OVERLAY */}
+      {sidebarOpen && (
+        <div 
+          className="fixed lg:hidden inset-0 bg-black/50 z-20"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
 
-            <nav className="flex-1 p-3 space-y-2 overflow-y-auto">
-              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition text-left">
-                <span>➕</span>
-                <span className="text-sm">New chat</span>
-              </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition text-left">
-                <span>🔍</span>
-                <span className="text-sm">Search</span>
-              </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 transition text-left">
-                <span>💬</span>
-                <span className="text-sm">Chats</span>
-              </button>
-            </nav>
-
-            <div className="p-3 border-t border-white/10">
-              <div className="flex items-center gap-3 px-3 py-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center font-bold text-sm">
-                  U
-                </div>
-                <div>
-                  <p className="text-sm font-medium">User</p>
-                  <p className="text-xs text-gray-400">Premium</p>
-                </div>
-              </div>
+      {/* SIDEBAR - Claude Style */}
+      <aside className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:relative w-64 h-screen transition-transform duration-300 border-r border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col z-30`}>
+        
+        {/* Header with Logo */}
+        <div className="p-4 flex items-center justify-between border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center font-bold text-white text-sm">
+              Z
             </div>
-          </>
-        )}
+            <span className="font-bold text-lg">ZORAX</span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 hover:bg-white/10 rounded-lg"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Main Navigation */}
+        <nav className="p-4 space-y-2">
+          <button
+            onClick={() => {
+              handleNewChat();
+              setSidebarOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/10 transition text-left text-sm font-medium border border-white/10 hover:border-white/20"
+          >
+            <span className="text-lg">➕</span>
+            <span>New Chat</span>
+          </button>
+          
+          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/10 transition text-left text-sm">
+            <span className="text-lg">🔍</span>
+            <span>Search</span>
+          </button>
+          
+          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-white/10 transition text-left text-sm">
+            <span className="text-lg">💬</span>
+            <span>Chats</span>
+          </button>
+        </nav>
+
+        {/* Divider */}
+        <div className="px-4 py-2">
+          <div className="h-px bg-white/10"></div>
+        </div>
+
+        {/* Settings Section */}
+        <div className="px-4 py-3 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Settings</p>
+          
+          {/* Auto-Speak Toggle */}
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium">Auto Speak</label>
+            <button
+              onClick={() => setAutoSpeak(!autoSpeak)}
+              className={`relative w-10 h-6 rounded-full transition ${autoSpeak ? "bg-blue-600" : "bg-white/20"}`}
+            >
+              <div className={`absolute w-5 h-5 rounded-full bg-white transition top-0.5 ${autoSpeak ? "right-0.5" : "left-0.5"}`}></div>
+            </button>
+          </div>
+
+          {/* Live Mode Toggle */}
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium">Live Mode</label>
+            <button
+              onClick={() => {
+                setLiveMode(!liveMode);
+                if (!liveMode) {
+                  liveListeningRef.current = false;
+                  setIsLiveListening(false);
+                }
+              }}
+              className={`relative w-10 h-6 rounded-full transition ${liveMode ? "bg-green-600" : "bg-white/20"}`}
+            >
+              <div className={`absolute w-5 h-5 rounded-full bg-white transition top-0.5 ${liveMode ? "right-0.5" : "left-0.5"}`}></div>
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="px-4 py-2">
+          <div className="h-px bg-white/10"></div>
+        </div>
+
+        {/* Chat History Section */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Recent Chats</p>
+          <div className="space-y-2">
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition text-sm text-gray-300 truncate">
+              💬 How does AI work?
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition text-sm text-gray-300 truncate">
+              📄 Document Analysis
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition text-sm text-gray-300 truncate">
+              🎨 Design Ideas
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition text-sm text-gray-300 truncate">
+              💻 Code Debugging
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition text-sm text-gray-300 truncate">
+              📝 Writing Help
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="px-4 py-2">
+          <div className="h-px bg-white/10"></div>
+        </div>
+
+        {/* Bottom Section */}
+        <div className="p-4 space-y-2 border-t border-white/10">
+          <button
+            onClick={handleClearHistory}
+            className="w-full px-3 py-2 text-xs bg-red-600/20 hover:bg-red-600/30 rounded-lg transition text-red-300 font-medium"
+          >
+            🗑️ Clear History
+          </button>
+          
+          {/* User Profile */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/10 transition">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center font-bold text-sm flex-shrink-0">
+              U
+            </div>
+            <div>
+              <p className="text-xs font-medium">User</p>
+              <p className="text-xs text-gray-400">Pro</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      {/* MAIN */}
+      {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
 
-        {/* HEADER */}
-        <header className="border-b border-white/10 bg-black/30 backdrop-blur-xl flex-shrink-0">
-          <div className="px-4 md:px-6 py-3 flex items-center justify-between">
+        {/* FIXED HEADER */}
+        <header className="border-b border-white/10 bg-black/50 backdrop-blur-xl flex-shrink-0 sticky top-0 z-20">
+          <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="p-2 rounded-lg hover:bg-white/10"
+                title="Toggle sidebar"
               >
                 ☰
               </button>
-              <div className="md:hidden flex items-center gap-2">
+              <div className="flex items-center gap-2 lg:hidden">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center font-bold text-white text-sm">
                   Z
                 </div>
-                <span className="font-bold">ZORAX</span>
+                <span className="font-bold text-sm">ZORAX</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-xs text-emerald-400 hidden sm:inline">Online</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Status Indicator */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
+                listening || isLiveListening ? "bg-red-500/10 border border-red-500/30" :
+                isSpeaking ? "bg-green-500/10 border border-green-500/30" :
+                loading ? "bg-yellow-500/10 border border-yellow-500/30" :
+                "bg-emerald-500/10 border border-emerald-500/30"
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  listening || isLiveListening ? "bg-red-500" :
+                  isSpeaking ? "bg-green-500" :
+                  loading ? "bg-yellow-500" :
+                  "bg-emerald-500"
+                } animate-pulse`}></div>
+                <span className={`hidden sm:inline ${
+                  listening || isLiveListening ? "text-red-400" :
+                  isSpeaking ? "text-green-400" :
+                  loading ? "text-yellow-400" :
+                  "text-emerald-400"
+                }`}>
+                  {listening || isLiveListening ? "Listening" :
+                   isSpeaking ? "Speaking" :
+                   loading ? "Thinking" :
+                   "Ready"}
+                </span>
               </div>
 
-              <button className="p-2 rounded-lg hover:bg-white/10">⚙️</button>
+              {/* Stop Speech Button */}
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeech}
+                  className="p-2 rounded-lg bg-red-600/30 hover:bg-red-600/40 text-red-300"
+                  title="Stop speaking"
+                >
+                  ⏹️
+                </button>
+              )}
 
+              {/* Menu Button */}
               <div className="relative">
                 <button
                   onClick={() => setShowMenu(!showMenu)}
                   className="p-2 rounded-lg hover:bg-white/10"
+                  title="More options"
                 >
                   ⋮
                 </button>
 
                 {showMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-slate-800/95 backdrop-blur border border-blue-500/30 rounded-lg shadow-xl z-50">
-                    {[
-                      { label: "New chat", icon: "➕" },
-                      { label: "Code Snippets", icon: "💻" },
-                      { label: "Quick Actions", icon: "⚡" },
-                      { label: "History", icon: "📜" },
-                      { label: "Settings", icon: "⚙️" },
-                    ].map((option, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setShowMenu(false)}
-                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-blue-500/10 transition text-left border-b border-blue-500/10 last:border-b-0 text-sm"
-                      >
-                        <span>{option.icon}</span>
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => { handleNewChat(); setShowMenu(false); }}
+                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-blue-500/10 transition text-left border-b border-blue-500/10 text-sm"
+                    >
+                      <span>➕</span>
+                      <span>New Chat</span>
+                    </button>
+                    <button
+                      onClick={() => { setAutoSpeak(!autoSpeak); setShowMenu(false); }}
+                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-blue-500/10 transition text-left border-b border-blue-500/10 text-sm"
+                    >
+                      <span>{autoSpeak ? "🔊" : "🔇"}</span>
+                      <span>{autoSpeak ? "Disable" : "Enable"} Auto-Speak</span>
+                    </button>
+                    <button
+                      onClick={() => { setLiveMode(!liveMode); setShowMenu(false); }}
+                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-blue-500/10 transition text-left border-b border-blue-500/10 text-sm"
+                    >
+                      <span>{liveMode ? "🔴" : "⚪"}</span>
+                      <span>{liveMode ? "Disable" : "Enable"} Live Mode</span>
+                    </button>
+                    <button
+                      onClick={() => { handleClearHistory(); setShowMenu(false); }}
+                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-red-500/10 transition text-left text-red-300 text-sm"
+                    >
+                      <span>🗑️</span>
+                      <span>Clear History</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -351,7 +544,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* CHAT */}
+        {/* CHAT MESSAGES */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
             {messages.map((msg, i) => (
@@ -361,20 +554,19 @@ export default function Home() {
                     Z
                   </div>
                 )}
-                <div className={`max-w-2xl rounded-lg px-4 py-3 ${
+                <div className={`max-w-xs sm:max-w-md md:max-w-2xl rounded-lg px-4 py-3 ${
                   msg.role === "user"
                     ? "bg-blue-600"
                     : "bg-white/10 border border-white/10"
                 }`}>
-                  {msg.image && <img src={msg.image} alt="img" className="rounded mb-2 max-w-sm max-h-48 object-cover" />}
                   {msg.files && msg.files.length > 0 && (
                     <div className="mb-2 space-y-1 pb-2 border-b border-white/20">
-                      {msg.files.map((f: any) => (
-                        <div key={f.id} className="text-xs">📎 {f.name}</div>
+                      {msg.files.map((f: any, idx: number) => (
+                        <div key={idx} className="text-xs">📎 {f.name}</div>
                       ))}
                     </div>
                   )}
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                 </div>
                 {msg.role === "user" && (
                   <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-pink-500 flex-shrink-0 flex items-center justify-center text-sm font-bold">
@@ -400,22 +592,22 @@ export default function Home() {
               </div>
             )}
 
-            {/* LISTENING STATE - SHOWS RECOGNIZED TEXT */}
-            {listening && (
-              <div className="flex gap-3 justify-start items-center">
+            {/* LISTENING STATE */}
+            {(listening || isLiveListening) && (
+              <div className="flex gap-3 justify-start items-start">
                 <div className="w-8 h-8 rounded-lg bg-red-600 flex-shrink-0 flex items-center justify-center text-sm animate-pulse">🎙️</div>
-                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3 flex-1">
+                <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3 flex-1 min-w-0">
                   {recognizedText ? (
-                    <p className="text-sm text-yellow-300">{recognizedText}</p>
+                    <p className="text-sm text-yellow-300 break-words">{recognizedText}</p>
                   ) : (
-                    <p className="text-sm text-gray-400">Listening...</p>
+                    <p className="text-sm text-gray-400">Listening {liveMode && "(Live Mode)"}</p>
                   )}
                 </div>
               </div>
             )}
 
             {/* SPEAKING STATE */}
-            {speechSynthesisRef.current && (
+            {isSpeaking && (
               <div className="flex gap-3 justify-start items-center">
                 <div className="w-8 h-8 rounded-lg bg-green-600 flex-shrink-0 flex items-center justify-center text-sm animate-pulse">🔊</div>
                 <div className="bg-white/10 border border-white/10 rounded-lg px-4 py-3">
@@ -428,33 +620,30 @@ export default function Home() {
           </div>
         </main>
 
-        {/* INPUT */}
-        <div className="border-t border-white/10 bg-black/30 backdrop-blur-xl flex-shrink-0">
-          <div className="max-w-4xl mx-auto px-4 py-4">
+        {/* INPUT SECTION */}
+        <div className="border-t border-white/10 bg-black/50 backdrop-blur-xl flex-shrink-0">
+          <div className="max-w-4xl mx-auto px-4 py-4 w-full">
 
-            {(imagePreview || attachedFiles.length > 0) && (
+            {/* File Preview */}
+            {attachedFiles.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
-                {imagePreview && (
-                  <div className="relative">
-                    <img src={imagePreview} alt="preview" className="max-w-xs rounded border border-cyan-500 max-h-24" />
-                    <button
-                      onClick={() => setImagePreview(null)}
-                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
                 {attachedFiles.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 bg-slate-700/50 px-3 py-2 rounded text-xs">
-                    📎 {f.name}
-                    <button onClick={() => removeFile(f.id)} className="ml-2 text-gray-400 hover:text-white">✕</button>
+                    <span>
+                      {f.type.startsWith('image/') ? '🖼️' :
+                       f.type === 'application/pdf' ? '📄' :
+                       f.type === 'text/csv' ? '📊' :
+                       '📎'}
+                    </span>
+                    <span className="truncate max-w-xs">{f.name}</span>
+                    <button onClick={() => removeFile(f.id)} className="ml-1 text-gray-400 hover:text-white">✕</button>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex items-end gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+            {/* Input Controls */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -466,8 +655,9 @@ export default function Home() {
 
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 rounded-lg hover:bg-white/10 flex-shrink-0 text-lg"
-                disabled={loading}
+                className="p-2.5 rounded-lg hover:bg-white/10 flex-shrink-0 text-lg sm:text-base transition"
+                disabled={loading || listening}
+                title="Attach files (PDF, images, CSV, etc.)"
               >
                 📎
               </button>
@@ -479,31 +669,31 @@ export default function Home() {
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
                 placeholder="Type or click microphone to speak..."
                 rows={1}
-                disabled={loading || listening}
-                className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 text-sm resize-none overflow-hidden disabled:opacity-50"
+                disabled={loading}
+                className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 px-2 text-sm resize-none overflow-hidden disabled:opacity-50"
               />
 
               <button
                 onClick={handleVoice}
-                className={`p-2 rounded-lg flex-shrink-0 text-lg transition ${
-                  listening ? "bg-red-500/30 text-red-300 hover:bg-red-500/40" : "hover:bg-white/10 text-gray-300 hover:text-white"
+                className={`p-2.5 rounded-lg flex-shrink-0 text-lg transition ${
+                  listening || isLiveListening ? "bg-red-500/30 text-red-300 hover:bg-red-500/40" : "hover:bg-white/10 text-gray-300 hover:text-white"
                 }`}
                 disabled={loading}
-                title={listening ? "Stop listening" : "Start speaking"}
+                title={listening || isLiveListening ? "Stop listening" : "Start speaking"}
               >
                 🎙️
               </button>
 
               <button
                 onClick={sendMessage}
-                disabled={(!input.trim() && !imagePreview && attachedFiles.length === 0) || loading}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm"
+                disabled={(!input.trim() && attachedFiles.length === 0) || loading}
+                className="px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm flex-shrink-0 transition"
               >
                 {loading ? "..." : "Send"}
               </button>
             </div>
 
-            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX AI • Voice + Text • Powered by Groq</p>
+            <p className="text-xs text-gray-500 mt-2 text-center">ZORAX Pro • AI Voice + Text • Powered by Groq</p>
           </div>
         </div>
 
